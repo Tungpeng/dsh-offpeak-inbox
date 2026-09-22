@@ -27,10 +27,11 @@
 | 包内容干净 | `npm pack` 实测 **17 个文件 / 88327 字节**：含 `lib/index.mjs`、`lib/client.js`、`cordis.patch.yml`、`src/*.ts`、`LICENSE`、`README.md`、`README.zh.md`、`package.json`；**不含** `src/client.js` 与 `lib/*.map`。已去掉 `--sourcemap`，避免产物里留悬空的 map 引用 |
 | 许可证与忽略规则 | `LICENSE`（MIT，Tungpeng）；`.gitignore` 覆盖 `node_modules/`、`lib/`、`dist/`、`src/client.js`、`.client-strip/`；`.gitattributes` 统一换行 |
 | 夹具不含真实素材 | 2026-09-22 公开前审计发现 `test/client.test.ts` 的搜索夹具直接使用仓库主人的真实站点名与片源编号。已换成中性样例（`整理旧清单与归档脚本`、`样例站点`、`SampleFeed`、`核对样例条目并更新索引`），并按 `matchesQuery` 的真实语义（**整串子串匹配，不切词**）同步改写查询串与断言 |
-| Git 历史干净 | 历史被重做为**单一提交** `Release 0.1.0: off-peak inbox for DeepSeek Harness`，工作区干净；公开内容无产物、无依赖、无个人路径。逐文件比对：本地 `git ls-tree -r HEAD` 的 36 个 blob 与远端 `git/trees/<HEAD>?recursive=1` 的 36 个 blob **逐个 SHA 相同**；对那份被替换的真实素材词表重新检索，公开树上零命中。**词表本身不写进本文件**——把待清除的词抄进说明里，等于换个位置又公开一次（本行初稿就这么错过一次） |
-| GitHub 仓库已建并公开 | `https://github.com/Tungpeng/dsh-offpeak-inbox`：`private=false`、默认分支 `main`、topics = `dsh-plugin` 等 7 个 |
-| CI 双平台通过 | run #2（提交 `fc7422a`）`check (ubuntu-latest, 22)` 与 `check (windows-latest, 22)` 均 success：`https://github.com/Tungpeng/dsh-offpeak-inbox/actions/runs/35724478683` |
-| Release 与预构建 tarball | Release `v0.1.0`，资产名**不带版本号** `dsh-offpeak-inbox.tgz`（88327 字节，`release id=393693969`）；市场要用的 `releases/latest/download/dsh-offpeak-inbox.tgz` 实测 HTTP 200 且 `Content-Length` 相符 |
+| Git 历史干净 | 历史被重做为**单一提交** `Release 0.1.0: off-peak inbox for DeepSeek Harness`；公开内容无产物、无依赖、无个人路径。逐文件比对：本地 `git ls-tree -r HEAD` 的 36 个 blob 与远端 `git/trees/<HEAD>?recursive=1` 的 36 个 blob **逐个 SHA 相同**；对那份被替换的真实素材词表重新检索，公开树上零命中。**词表本身不写进本文件**——把待清除的词抄进说明里，等于换个位置又公开一次（本行初稿就这么错过一次） |
+| GitHub 仓库已建并公开 | `https://github.com/Tungpeng/dsh-offpeak-inbox`：`private=false`、默认分支 `main`、topics = `dsh-plugin` 等 7 个。**2026-09-22 12:10 UTC 删库重建过一次**（为彻底清除改历史前的旧对象，缘由见「5」），因此市场投稿要求的「仓库创建满 1 天」从该时刻重新起算，而不是首次建库的时间 |
+| CI 双平台通过 | 重建后 run #1（提交 `4017a1e`）`check (ubuntu-latest, 22)` 与 `check (windows-latest, 22)` 均 success：`https://github.com/Tungpeng/dsh-offpeak-inbox/actions/runs/35725588205` |
+| Release 与预构建 tarball | Release `v0.1.0`（重建后重新创建，tag 指向 `4017a1e`，本地 tag 已同步对齐），资产名**不带版本号** `dsh-offpeak-inbox.tgz`（88327 字节，与重建前逐字节同尺寸）；市场要用的 `releases/latest/download/dsh-offpeak-inbox.tgz` 实测 HTTP 200 |
+| 旧对象已彻底清除 | 删库重建后实测：`GET /repos/Tungpeng/dsh-offpeak-inbox` 复原为 201 前先返回 **404**，`GET /repos/.../commits/<改历史前的提交>` 返回 **404**，其 `raw.githubusercontent.com` 路径同样 **404**。即那份带真实素材的旧夹具在 GitHub 上不再可达——这是强制推送做不到、只有删库才能做到的一步 |
 | npm 自动发布已设闸门 | `publish.yml` 的 job 加 `if: vars.NPM_TRUSTED_PUBLISHING == 'true'`。实测推 `v0.1.0` tag 后该 workflow 结论为 **skipped（灰）而非失败**，不给新仓库留红色记录；npm 侧配置完成后把仓库变量设为 `true` 即恢复自动发布 |
 | CI 工作流 | `.github/workflows/ci.yml`：pnpm 10 + `--frozen-lockfile`，`typecheck → build → test`（顺序保证构建产物先于测试），矩阵 Linux + Windows，Node 22；`pnpm-lock.yaml` 已入库 |
 | 双语文档 | `README.md`（英文）+ `README.zh.md`（中文），安装段给出三条可用路径（预构建 tarball / `github:` 源码 / npm）并标明 npm 尚未发布；配置表按代码实际键名更正为 `launchIntervalSeconds`（默认 10，地板 2，旧名 `tickSeconds` 仍兼容） |
@@ -42,8 +43,9 @@
 |---|---|---|
 | U1 | **npm 登录**：`npm login`（当前 `npm whoami` 报 `ENEEDAUTH`） | 需要你的账号与密码/双因素，不应经过我 |
 | U3 | **发布 npm**：`npm publish`（仓库地址已按 `Tungpeng/dsh-offpeak-inbox` 填好） | 同上，且发布不可撤销 |
-| U5 | **投稿市场**：仓库创建满 **1 天**后，向市场主仓库提 PR 新增 `data/plugins/Tungpeng__dsh-offpeak-inbox.yml` | PR 用你的账号提交 |
-| U6 | **（可选）彻底删除旧对象**：改历史前的提交仍可按 SHA 直接取到，见「5. 已知风险」 | 需要 `delete_repo` 权限，见「5」 |
+| U5 | **投稿市场**：仓库创建满 **1 天**后（重建时刻 2026-09-22 12:10 UTC 起算），向市场主仓库提 PR 新增 `data/plugins/Tungpeng__dsh-offpeak-inbox.yml` | PR 用你的账号提交 |
+
+> 「彻底删除旧对象」原本列在这里作为可选项，已由仓库主人于 2026-09-22 删库完成，见「1」与「5」。
 
 ## 3. 剩余 —— 我可以继续做
 
@@ -74,7 +76,7 @@ npm pack
 
 ## 5. 已知风险与边界
 
-- **改历史前的提交仍可按 SHA 取到**：重做历史用的是强制推送，GitHub 不会立即回收不可达对象。实测旧提交（`3f175bd…`）的 `raw.githubusercontent.com` 路径此刻仍返回 200，即那份带真实素材的夹具**仍可被知道 SHA 的人取到**——但它已不在任何分支、不参与浏览与搜索、也不会被 clone 下来。彻底清除需要删除并重建仓库，而本机存有的 GitHub 凭据只有 `gist, repo, workflow` 三个 scope，**没有 `delete_repo`**（实测 `DELETE /repos/...` 返回 403）。要清除请你在网页端 Settings → Delete this repository 删掉后告诉我重建，或给一个有 `delete_repo` 的 token。
+- **强制推送清不掉旧对象，删库才行（2026-09-22 已解决）**：重做历史用的是强制推送，而 GitHub 不会立即回收不可达对象——实测旧提交在强推之后仍能按 SHA 取到。因此改由仓库主人在网页端删库，随后重建、重推、重挂 Release。重建后实测：仓库建成前为 404、旧提交在 API 与 `raw.githubusercontent.com` 两条路径上均为 **404**，那份带真实素材的夹具已不可达。代价是仓库创建时间、star/issue 计数与旧 Actions 记录一并重置，市场投稿的「满 1 天」重新起算。本机存有的 GitHub 凭据只有 `gist, repo, workflow` 三个 scope，**没有 `delete_repo`**（实测 `DELETE /repos/...` 返回 403），所以删库这一步只能由仓库主人做。
 - **npm 的 `private` 字段**：本机实测 `npm publish --dry-run` **不会**拦它（退出码 0），所以别指望 dry-run 提前发现；真实发布时才会以 `EPRIVATE` 拒绝。证据等级：报错文案与社区问答一致，但未在本机复现（缺账号）。
 - **`latest/download/` 的时效陷阱**：该形式只在请求时解析 `latest`，文件名照字面取；资产名带版本号会在你下次发版后静默 404。
 - **市场会移除条目**：仓库消失、长期停更、或"存在明显缺陷"的条目会被移除，收录不是永久的。
