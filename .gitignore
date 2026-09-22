@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Build output: produced by `npm run build`, never committed.
+lib/
+# tsdown's default output directory, only used if the build is invoked without
+# the explicit --out-dir flag.
+dist/
+
+# Build intermediate: tsc emits this from src/client.ts before it is wrapped
+# into lib/client.js. Shipping it in the package is a bug, not a feature.
+src/client.js
+.client-strip/
+tsconfig.client-strip.json
+
+# Local tool state and logs
+.vite/
+*.log

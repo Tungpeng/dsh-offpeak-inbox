@@ -1,0 +1,24 @@
+# dsh-offpeak-inbox bundle patch: inserts the plugin row into the profile roster.
+# The row is a bare plugin by package name: the node half runs in the host
+# process (the scheduler and the routes) and the `dsh.client` declaration in
+# package.json loads the browser half in the Web GUI.
+- insert:
+    - id: offpeak-inbox
+      name: 'dsh-offpeak-inbox'
+      config:
+        enabled: true
+        # Peak calendar published by DeepSeek: 01:00-04:00 and 06:00-10:00 UTC,
+        # Monday through Friday. Everything else bills at the off-peak rate.
+        timeZone: 'UTC'
+        ranges:
+          - start: '01:00'
+            end: '04:00'
+          - start: '06:00'
+            end: '10:00'
+        announceToAgent: true
+        # Each round starts at most one session, so this interval is the pace at
+        # which a backlog drains: ten seconds empties a ten-item queue in under
+        # two minutes while keeping only a few executions in flight at once.
+        # The floor is two seconds.
+        launchIntervalSeconds: 10
+        executionTimeoutSeconds: 14400

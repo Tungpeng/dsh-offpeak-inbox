@@ -1,0 +1,67 @@
+{
+  "name": "dsh-offpeak-inbox",
+  "version": "0.1.0",
+  "description": "DSH 错峰收件箱：平时把会话与想法存起来，只在 DeepSeek API 平价（错峰）时段自动推送给 DSH 执行。",
+  "type": "module",
+  "main": "lib/index.mjs",
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "!lib/*.map",
+    "src",
+    "!src/client.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tungpeng/dsh-offpeak-inbox.git"
+  },
+  "homepage": "https://github.com/Tungpeng/dsh-offpeak-inbox#readme",
+  "bugs": {
+    "url": "https://github.com/Tungpeng/dsh-offpeak-inbox/issues"
+  },
+  "author": "Tungpeng",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "off-peak",
+    "scheduler",
+    "cost-saving",
+    "ai-agent"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsdown src/index.ts --out-dir lib --format esm --platform node --target node22 --no-dts && node scripts/strip-client-types.mjs && node scripts/publish-client.mjs",
+    "publish:client": "node scripts/publish-client.mjs",
+    "build:client": "node scripts/strip-client-types.mjs && node scripts/publish-client.mjs",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@types/node": "^22.20.0",
+    "tsdown": "0.22.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  }
+}

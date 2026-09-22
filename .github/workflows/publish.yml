@@ -1,0 +1,56 @@
+name: Publish
+
+# Publishes the package to npm when a version tag is pushed.
+#
+# This uses npm trusted publishing (OIDC), so the repository stores no npm
+# token at all: GitHub mints a short-lived credential for this specific
+# workflow. Two things must be true before this workflow can succeed:
+#
+#   1. The package already exists on npm (publish it once by hand first).
+#   2. A trusted publisher is configured for it on npmjs.com:
+#      Packages -> dsh-offpeak-inbox -> Settings -> Trusted publishing
+#        Organization or user: the GitHub owner of this repository
+#        Repository:           dsh-offpeak-inbox
+#        Workflow filename:    publish.yml
+#
+# Until then, publish manually with `npm publish`.
+#
+# The job is gated on the repository variable NPM_TRUSTED_PUBLISHING, which is
+# unset here: pushing a `v*` tag before step 2 exists would only produce a
+# failed run. Set the variable to `true` once step 2 is done, and tag pushes
+# publish again.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    if: vars.NPM_TRUSTED_PUBLISHING == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm CLI 11.5.1 or later, which is newer than
+      # the CLI bundled with some Node 22 releases.
+      - run: npm install -g npm@latest
+
+      - run: pnpm install --frozen-lockfile
+
+      # `prepublishOnly` runs the type checks and the test suite, so this step
+      # refuses to publish a revision that does not pass them.
+      - run: npm publish

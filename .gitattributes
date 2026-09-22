@@ -1,0 +1,9 @@
+# Normalize line endings in the repository; checkouts keep the platform default.
+* text=auto
+
+# Files whose exact bytes matter on every platform.
+*.mjs text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
