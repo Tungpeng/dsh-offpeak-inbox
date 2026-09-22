@@ -27,7 +27,7 @@
 | 包内容干净 | `npm pack` 实测 **17 个文件 / 88327 字节**：含 `lib/index.mjs`、`lib/client.js`、`cordis.patch.yml`、`src/*.ts`、`LICENSE`、`README.md`、`README.zh.md`、`package.json`；**不含** `src/client.js` 与 `lib/*.map`。已去掉 `--sourcemap`，避免产物里留悬空的 map 引用 |
 | 许可证与忽略规则 | `LICENSE`（MIT，Tungpeng）；`.gitignore` 覆盖 `node_modules/`、`lib/`、`dist/`、`src/client.js`、`.client-strip/`；`.gitattributes` 统一换行 |
 | 夹具不含真实素材 | 2026-09-22 公开前审计发现 `test/client.test.ts` 的搜索夹具直接使用仓库主人的真实站点名与片源编号。已换成中性样例（`整理旧清单与归档脚本`、`样例站点`、`SampleFeed`、`核对样例条目并更新索引`），并按 `matchesQuery` 的真实语义（**整串子串匹配，不切词**）同步改写查询串与断言 |
-| Git 历史干净 | 历史被重做为**单一提交** `Release 0.1.0: off-peak inbox for DeepSeek Harness`，工作区干净；公开内容无产物、无依赖、无个人路径。逐文件比对：本地 `git ls-tree -r HEAD` 的 36 个 blob 与远端 `git/trees/<HEAD>?recursive=1` 的 36 个 blob **逐个 SHA 相同**；`git grep -iE "mteam\|bitporn\|养号\|ipvr\|桃谷"` 在公开树上零命中 |
+| Git 历史干净 | 历史被重做为**单一提交** `Release 0.1.0: off-peak inbox for DeepSeek Harness`，工作区干净；公开内容无产物、无依赖、无个人路径。逐文件比对：本地 `git ls-tree -r HEAD` 的 36 个 blob 与远端 `git/trees/<HEAD>?recursive=1` 的 36 个 blob **逐个 SHA 相同**；对那份被替换的真实素材词表重新检索，公开树上零命中。**词表本身不写进本文件**——把待清除的词抄进说明里，等于换个位置又公开一次（本行初稿就这么错过一次） |
 | GitHub 仓库已建并公开 | `https://github.com/Tungpeng/dsh-offpeak-inbox`：`private=false`、默认分支 `main`、topics = `dsh-plugin` 等 7 个 |
 | CI 双平台通过 | run #2（提交 `fc7422a`）`check (ubuntu-latest, 22)` 与 `check (windows-latest, 22)` 均 success：`https://github.com/Tungpeng/dsh-offpeak-inbox/actions/runs/35724478683` |
 | Release 与预构建 tarball | Release `v0.1.0`，资产名**不带版本号** `dsh-offpeak-inbox.tgz`（88327 字节，`release id=393693969`）；市场要用的 `releases/latest/download/dsh-offpeak-inbox.tgz` 实测 HTTP 200 且 `Content-Length` 相符 |
