@@ -77,6 +77,47 @@ function stepMark(instantMs: number): number {
   return instantMs - (instantMs % step)
 }
 
+/** One node as the serialized schema carries it, with descendants still ids. */
+interface WireNode {
+  type: string
+  meta: Record<string, unknown>
+  dict?: Record<string, number>
+  inner?: number
+}
+
+/** One node after its id references were resolved, as `new Schema(json)` links them. */
+interface LinkedNode {
+  type: string
+  meta: Record<string, unknown>
+  dict?: Record<string, LinkedNode>
+  inner?: LinkedNode
+}
+
+/**
+ * Rehydrate a serialized schema the way the browser half does: `new Schema(json)`
+ * resolves every `dict`/`inner` entry against the envelope's own table.
+ * @param envelope - the value `Config.toJSON()` returned.
+ * @returns the root node with its descendants linked.
+ */
+function rehydrate(envelope: { uid: number; refs: Record<number, WireNode> }): LinkedNode {
+  const wire = new Map<number, WireNode>(
+    Object.entries(envelope.refs).map(([uid, node]) => [Number(uid), node]),
+  )
+  const link = (uid: number): LinkedNode => {
+    const node = wire.get(uid)
+    if (node === undefined) throw new Error(`serialized schema references missing node ${uid}`)
+    return {
+      type: node.type,
+      meta: node.meta,
+      ...node.dict === undefined
+        ? {}
+        : { dict: Object.fromEntries(Object.entries(node.dict).map(([key, child]) => [key, link(child)])) },
+      ...node.inner === undefined ? {} : { inner: link(node.inner) },
+    }
+  }
+  return link(envelope.uid)
+}
+
 describe('config schema', () => {
   it('applies the shipped defaults for an empty config', () => {
     const result = internals.parseConfig(undefined)
@@ -96,6 +137,57 @@ describe('config schema', () => {
 
   it('exposes the defaults for the loader-driven settings editors', () => {
     expect(Config.default).toEqual(DEFAULT_CONFIG)
+  })
+
+  it('serializes the schema the settings page reads', () => {
+    // The host's `describe()` calls `schema.toJSON()` on every registration and
+    // the browser rehydrates the result with `new Schema(json)`. Regression: the
+    // schema was a bare function, so that call threw
+    // "registration.schema.toJSON is not a function" and took the settings page
+    // down with it (rehydrate() resolves the references the same way).
+    const root = rehydrate(Config.toJSON())
+    expect(root.type).toBe('object')
+    expect(Object.keys(root.dict ?? {}).sort()).toEqual([
+      'announceToAgent', 'enabled', 'executionTimeoutSeconds', 'launchIntervalSeconds', 'ranges', 'timeZone',
+    ])
+    expect(root.meta['default']).toEqual(DEFAULT_CONFIG)
+  })
+
+  it('describes every field with the type, default, and bound a form renders', () => {
+    const root = rehydrate(Config.toJSON())
+    const dict = root.dict ?? {}
+    expect(dict['enabled']).toMatchObject({ type: 'boolean', meta: { default: true } })
+    expect(dict['timeZone']).toMatchObject({ type: 'string', meta: { default: 'UTC' } })
+    expect(dict['announceToAgent']).toMatchObject({ type: 'boolean', meta: { default: true } })
+    expect(dict['launchIntervalSeconds']).toMatchObject({ type: 'number', meta: { default: 10, min: 2, step: 1 } })
+    expect(dict['executionTimeoutSeconds']).toMatchObject({ type: 'number', meta: { default: 14400, min: 60, step: 1 } })
+    expect(dict['ranges']).toMatchObject({ type: 'array', meta: { default: DEFAULT_CONFIG.ranges } })
+    expect(dict['ranges']?.inner?.dict?.['start']).toMatchObject({ type: 'string', meta: { required: true } })
+    expect(dict['ranges']?.inner?.dict?.['end']).toMatchObject({ type: 'string', meta: { required: true } })
+  })
+
+  it('advertises the same floors the validator enforces', () => {
+    const dict = rehydrate(Config.toJSON()).dict ?? {}
+    const floor = dict['launchIntervalSeconds']?.meta['min'] as number
+    expect(internals.parseConfig({ launchIntervalSeconds: floor - 1 }).issues?.[0]?.message)
+      .toMatch(new RegExp(`at least ${floor}`))
+    const timeoutFloor = dict['executionTimeoutSeconds']?.meta['min'] as number
+    expect(internals.parseConfig({ executionTimeoutSeconds: timeoutFloor - 1 }).issues?.[0]?.message)
+      .toMatch(new RegExp(`at least ${timeoutFloor}`))
+  })
+
+  it('refuses an envelope whose references do not resolve', () => {
+    // Keeps the two checks above from passing vacuously: a node id with no
+    // entry in `refs` is what a form would fail to render.
+    expect(() => rehydrate({ uid: 1, refs: { 1: { type: 'object', meta: {}, dict: { ranges: 99 } } } }))
+      .toThrow(/missing node 99/)
+  })
+
+  it('builds a fresh envelope, so a form cannot mutate the shipped defaults', () => {
+    const first = Config.toJSON()
+    ;(first.refs[first.uid]?.meta['default'] as OffpeakInboxConfig).enabled = false
+    const next = Config.toJSON()
+    expect((next.refs[next.uid]?.meta['default'] as OffpeakInboxConfig).enabled).toBe(true)
   })
 
   it('rejects an unknown time zone', () => {

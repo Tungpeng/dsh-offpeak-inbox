@@ -2,6 +2,7 @@
 
 > 本文件描述**此刻的真实状态**，不是计划。每条结论都有可复现的证据；做过的事标 ✅ 并写清证据，没做的写清卡在哪里。
 > 审计历史：第一轮独立审计推翻了「本机路径已清零」与两处文档失实，均已处理。第二轮独立审计（2026-09-22，公开前）推翻了「无隐私残留」——测试夹具里写着仓库主人的真实站点名与片源编号，已在公开前替换并把旧历史整体重做，见「1」；该轮同时点出两处文档失实（提交数、测试项数），下文已按实测更正。
+> 第三轮（2026-09-22 晚，用户在真机上打开设置页时报障）：报错 `registration.schema.toJSON is not a function`。根因不在设置页而在本插件——0.1.0 注册给设置系统的 schema 是个没有 `toJSON` 的普通函数，而宿主序列化**每一个**已注册 schema 时中间没有兜底，于是整条 `settings/describe` 抛错（同部署下**所有**插件的设置卡片一起失效，不只是本插件）。修复 + 回归防线见「1」，0.1.0 的 Release 资产因此作废，见「5」。
 
 ## 0. 已拍板
 
@@ -20,17 +21,19 @@
 | 本机绝对路径清零 | `tsconfig.json` 已无 `paths`/`typeRoots`；`scripts/strip-client-types.mjs` 用 `import.meta.dirname` 推根目录、tsc 取本地依赖；本机部署诊断脚本（4 个，含硬编码日志路径与 profile 路径者）已移出仓库 |
 | 仓库自包含 | 本仓库自带 `node_modules`（pnpm），`@deepseek-ai/cordis` 锁 4.0.2；独立审计做过反向验证：把本地 cordis 改名后 `test/runtime.test.ts` 立刻报找不到包——**不存在回退到别处检出的路径** |
 | 类型检查两处干净 | `npm run typecheck` = `tsc --noEmit && tsc -p tsconfig.client.json --noEmit`，退出码 0 |
-| 测试全绿 | `npm test`（含 `pretest` 构建）：5 个文件、**111 项通过**（本地 vitest 3.2.7）。更早一次同环境读数为 4 个文件 83 项；差额来自其后新增的客户端与投递测试，不是失败项。2026-09-22 替换夹具后复测仍为 5 文件 111 项 |
-| 构建自包含且输出正确 | `npm run build` 产出 `lib/index.mjs`（57169 字节）+ `lib/client.js`（55847 字节）。**读日志时注意**：构建链打印的 `54849 bytes` 是 JS 字符串长度，落盘的是 UTF-8 字节数，两者相差中文字符数×2，不是「产物与源码不同步」。已修两处旧隐患：`tsdown` 未指定输出目录会落到 `dist/`、构建脚本用管道捕获子进程输出会在受限沙箱下 EPERM |
+| 测试全绿 | `npm test`（含 `pretest` 构建）：5 个文件、**117 项通过**（本地 vitest 3.2.7）。更早一次同环境读数为 4 个文件 83 项；差额来自其后新增的客户端与投递测试，不是失败项。2026-09-22 替换夹具后复测 111 项；修设置页缺陷时新增 6 项（序列化结构 1 + 字段描述 1 + 下限一致 1 + 引用完整性 1 + 信封不可变 1 + 运行时读取 1），复测 5 文件 117 项 |
+| 构建自包含且输出正确 | `npm run build` 产出 `lib/index.mjs`（0.1.1 起 **59485 字节**，0.1.0 时 57169）+ `lib/client.js`（**55847 字节**，未改动）。**读日志时注意**：构建链打印的 `59.48 kB` / `54849 bytes` 是 JS 字符串长度，落盘的是 UTF-8 字节数，两者相差中文字符数×2，不是「产物与源码不同步」。已修两处旧隐患：`tsdown` 未指定输出目录会落到 `dist/`、构建脚本用管道捕获子进程输出会在受限沙箱下 EPERM |
 | 新克隆可直接跑测试 | 新增 `pretest`，`npm test` 会先构建（运行时测试打的是构建产物） |
 | npm 发布元数据 | `private` 已移除；`repository`/`homepage`/`bugs`/`author`/`keywords` 齐备；`prepare`（源码直装）与 `prepublishOnly`（构建→类型检查→测试）就位 |
-| 包内容干净 | `npm pack` 实测 **17 个文件 / 88327 字节**：含 `lib/index.mjs`、`lib/client.js`、`cordis.patch.yml`、`src/*.ts`、`LICENSE`、`README.md`、`README.zh.md`、`package.json`；**不含** `src/client.js` 与 `lib/*.map`。已去掉 `--sourcemap`，避免产物里留悬空的 map 引用 |
+| 包内容干净 | `npm pack` 实测 **17 个文件 / 90320 字节**（0.1.1；0.1.0 时 88327，差额来自 index.mjs 与文档）：含 `lib/index.mjs`、`lib/client.js`、`cordis.patch.yml`、`src/*.ts`、`LICENSE`、`README.md`、`README.zh.md`、`package.json`；**不含** `src/client.js` 与 `lib/*.map`。已去掉 `--sourcemap`，避免产物里留悬空的 map 引用 |
+| 设置页缺陷已修（0.1.1） | 复现：用本机真机在跑的 `@deepseek-ai/dsh-settings` + 真实 schemastery 3.18.2 建一个内存 provider，注册 0.1.0 的 `lib/index.mjs` 后调 `describe()` → `TypeError: registration.schema.toJSON is not a function`（探针放在工作区 `.probe/offpeak-settings-probe.mjs`，不进仓库；修复前 8 项里 1 项 FAIL、退出码 1）。修复后同一探针 8 项全 PASS，含 `new Schema(json)` 反序列化、六个配置键、默认值与真实取值的 schema 校验。回归防线双保险：`test/service.test.ts` 逐条解析 `refs` 引用并核对字段类型/默认值/下限；`test/runtime.test.ts` 的假宿主改成与真宿主一样在读 schema 时调 `toJSON()`——实测把构建产物里的 `toJSON` 摘掉后该测试即变红。**这条防线是半循环的，别当成宿主契约**：那句 TypeError 文本是假宿主自己抛的（`test/runtime.test.ts` 内），它守得住「产物丢了 `toJSON`」，守不住「宿主以后换了调用方式」；真宿主契约由仓库外的探针持有，**宿主升级后必须重跑探针**。另：`package.json` 版本 0.1.0 → 0.1.1，两份 README 的「部署注意」补了这条坑 |
 | 许可证与忽略规则 | `LICENSE`（MIT，Tungpeng）；`.gitignore` 覆盖 `node_modules/`、`lib/`、`dist/`、`src/client.js`、`.client-strip/`；`.gitattributes` 统一换行 |
 | 夹具不含真实素材 | 2026-09-22 公开前审计发现 `test/client.test.ts` 的搜索夹具直接使用仓库主人的真实站点名与片源编号。已换成中性样例（`整理旧清单与归档脚本`、`样例站点`、`SampleFeed`、`核对样例条目并更新索引`），并按 `matchesQuery` 的真实语义（**整串子串匹配，不切词**）同步改写查询串与断言 |
-| Git 历史干净 | 历史被重做为**单一提交** `Release 0.1.0: off-peak inbox for DeepSeek Harness`；公开内容无产物、无依赖、无个人路径。逐文件比对：本地 `git ls-tree -r HEAD` 的 36 个 blob 与远端 `git/trees/<HEAD>?recursive=1` 的 36 个 blob **逐个 SHA 相同**；对那份被替换的真实素材词表重新检索，公开树上零命中。**词表本身不写进本文件**——把待清除的词抄进说明里，等于换个位置又公开一次（本行初稿就这么错过一次） |
+| Git 历史干净 | 历史被重做为全新历史（**更正：当前是 4 个提交**——发布提交 `fc7422a` + 3 条文档提交；本行早前写的「单一提交」已被后续文档提交推翻，按 `git log --oneline` 实测改写）。公开内容无产物、无依赖、无个人路径：此前逐 blob 比对与「被替换素材词表」检索的结论未变；本轮复核的是**本地与远端同树**——`git fetch origin` 后本地 `HEAD` 与 `origin/main` 同为 `6ea01b6`（提交 SHA 相同即同一棵树），树内 36 个 blob。**词表本身不写进本文件**——把待清除的词抄进说明里，等于换个位置又公开一次（本行初稿就这么错过一次） |
 | GitHub 仓库已建并公开 | `https://github.com/Tungpeng/dsh-offpeak-inbox`：`private=false`、默认分支 `main`、topics = `dsh-plugin` 等 7 个。**2026-09-22 12:10 UTC 删库重建过一次**（为彻底清除改历史前的旧对象，缘由见「5」），因此市场投稿要求的「仓库创建满 1 天」从该时刻重新起算，而不是首次建库的时间 |
 | CI 双平台通过 | 重建后 run #1（提交 `4017a1e`）`check (ubuntu-latest, 22)` 与 `check (windows-latest, 22)` 均 success：`https://github.com/Tungpeng/dsh-offpeak-inbox/actions/runs/35725588205` |
-| Release 与预构建 tarball | Release `v0.1.0`（重建后重新创建，tag 指向 `4017a1e`，本地 tag 已同步对齐），资产名**不带版本号** `dsh-offpeak-inbox.tgz`（88327 字节，与重建前逐字节同尺寸）；市场要用的 `releases/latest/download/dsh-offpeak-inbox.tgz` 实测 HTTP 200 |
+| Release 与预构建 tarball | Release `v0.1.0`（重建后重新创建，tag 指向 `4017a1e`，本地 tag 已同步对齐），资产名**不带版本号** `dsh-offpeak-inbox.tgz`（88327 字节，与重建前逐字节同尺寸）；市场要用的 `releases/latest/download/dsh-offpeak-inbox.tgz` 实测 HTTP 200。**⚠️ 该资产已作废**：它带的正是本表「设置页缺陷已修（0.1.1）」那行所修的缺陷，在 v0.1.1 发布前不能给任何用户，见「5」 |
+| 0.1.1 资产已打好（待上传） | `npm pack` 后重命名为 `dsh-offpeak-inbox.tgz`，落在工作区 `.probe/` 下（不进仓库）：**90320 字节**，SHA256 `32C5C67DD4895DEBEE1AFC5D43156387330CAFD93A3BE823C2E094A545E7E8DB`。逐件核对过：解包后 `lib/index.mjs` 59485 字节，其 SHA256 `C18E5AEF5593719592CA7659A7CDC1ED73C4D23220E8FCBCAB79012D980E807F` 与现场构建产物**逐字节相同**、`package.json` = `0.1.1`、README 里含本轮新增的部署注意；探针直接指向**解包产物**再跑一遍，8 项仍全 PASS（验的就是要上传的那个文件）。该资产已在**最后一次构建之后**重打一次（见「5」的时序陷阱），重打结果与先前的包**同为 90320 字节、同一 SHA256**，即先前那次时序倒置没有影响内容 |
 | 旧对象已彻底清除 | 删库重建后实测：`GET /repos/Tungpeng/dsh-offpeak-inbox` 复原为 201 前先返回 **404**，`GET /repos/.../commits/<改历史前的提交>` 返回 **404**，其 `raw.githubusercontent.com` 路径同样 **404**。即那份带真实素材的旧夹具在 GitHub 上不再可达——这是强制推送做不到、只有删库才能做到的一步 |
 | npm 自动发布已设闸门 | `publish.yml` 的 job 加 `if: vars.NPM_TRUSTED_PUBLISHING == 'true'`。实测推 `v0.1.0` tag 后该 workflow 结论为 **skipped（灰）而非失败**，不给新仓库留红色记录；npm 侧配置完成后把仓库变量设为 `true` 即恢复自动发布 |
 | CI 工作流 | `.github/workflows/ci.yml`：pnpm 10 + `--frozen-lockfile`，`typecheck → build → test`（顺序保证构建产物先于测试），矩阵 Linux + Windows，Node 22；`pnpm-lock.yaml` 已入库 |
@@ -41,9 +44,10 @@
 
 | # | 事项 | 为什么只能你来 |
 |---|---|---|
+| U2 | **提交并发布 0.1.1**：修复已在工作区（`git status` 有改动），需要一个提交 + 推 `main` + 打 `v0.1.1` tag + 建 Release（资产用上面那份 90320 字节的 `dsh-offpeak-inbox.tgz`） | 推 tag / 建 Release 是远端写且 tag 不好回收；这一步做完 `latest/download` 自动指到修好的版本，市场投稿才安全 |
 | U1 | **npm 登录**：`npm login`（当前 `npm whoami` 报 `ENEEDAUTH`） | 需要你的账号与密码/双因素，不应经过我 |
-| U3 | **发布 npm**：`npm publish`（仓库地址已按 `Tungpeng/dsh-offpeak-inbox` 填好） | 同上，且发布不可撤销 |
-| U5 | **投稿市场**：仓库创建满 **1 天**后（重建时刻 2026-09-22 12:10 UTC 起算），向市场主仓库提 PR 新增 `data/plugins/Tungpeng__dsh-offpeak-inbox.yml` | PR 用你的账号提交 |
+| U3 | **发布 npm**：`npm publish`（仓库地址已按 `Tungpeng/dsh-offpeak-inbox` 填好；现在会发 **0.1.1**，不是带缺陷的 0.1.0） | 同上，且发布不可撤销 |
+| U5 | **投稿市场**：仓库创建满 **1 天**后（重建时刻 2026-09-22 12:10 UTC 起算，即 2026-09-23 12:10 UTC 之后），向市场主仓库提 PR 新增 `data/plugins/Tungpeng__dsh-offpeak-inbox.yml`。**提 PR 前先完成 U2**，否则市场按 `latest/download` 取到的还是带缺陷的 0.1.0 资产 | PR 用你的账号提交 |
 
 > 「彻底删除旧对象」原本列在这里作为可选项，已由仓库主人于 2026-09-22 删库完成，见「1」与「5」。
 
@@ -64,18 +68,22 @@
 git remote add origin https://github.com/Tungpeng/dsh-offpeak-inbox.git
 git push -u origin main
 
-# 2) 发布 npm（先补 U1）
+# 2) 发布 npm（先补 U1）—— 待做，发的是 0.1.1
 npm publish
 
-# 3) 产出 Release 资产 —— ✅ 已完成（v0.1.0，资产名 dsh-offpeak-inbox.tgz）
+# 3) 产出 Release 资产 —— ✅ 0.1.1 的 tarball 已打好（90320 字节，见「1」），待随 v0.1.1 Release 上传
 npm pack
 # 把生成的 dsh-offpeak-inbox-<版本>.tgz 重命名为 dsh-offpeak-inbox.tgz 后上传到 Release
+# ⚠️ 时序：npm test / npm pack 都会重写 lib/。必须在**最后一次构建之后**打包，并解包比对
+#    lib/index.mjs 的 SHA256 与现场构建产物一致，不相等就作废重打（缘由见「5」）。
 
-# 4) 验证市场里的 tarball 链接确实可下载 —— ✅ 已完成（HTTP 200），再提投稿 PR
+# 4) 验证市场里的 tarball 链接确实可下载 —— v0.1.0 时已实测 HTTP 200；换成 v0.1.1 后要再测一次，再提投稿 PR
 ```
 
 ## 5. 已知风险与边界
 
+- **v0.1.0 的 Release 资产带设置页缺陷（2026-09-22 用户真机报障）**：`registration.schema.toJSON is not a function`。这条不是本插件自己坏掉那么轻——宿主的 `SettingsProvider.describe()` 会遍历**所有**已注册命名空间并调 `schema.toJSON()`，一个不合格的 schema 会让整条 `settings/describe` 抛错，于是同一部署里**别的插件**的设置卡片也一起打不开。已修在 0.1.1（见「1」）。**在 v0.1.1 发布前，`releases/latest/download/dsh-offpeak-inbox.tgz` 取到的仍是带缺陷的构建**，不要把它发给任何人，也不要在此状态提市场投稿。
+- **「验的是 A、传的是 B」的打包时序陷阱（2026-09-22 实测踩到半步）**：本次 tarball 生成于 19:17:17，而最后一次 `npm run build`（`npm test` 的 `pretest`）在 19:18:52 —— 打包早于最后一次构建。这次两边字节相同（`lib/index.mjs` 的 SHA256 均为 `C18E5AEF5593719592CA7659A7CDC1ED73C4D23220E8FCBCAB79012D980E807F`）所以没出事，但顺序本身不可依赖：`npm test` 与 `npm pack` 都会重写 `lib/`。规则：**最后一次构建之后才打包，打包后解包比对 `lib/index.mjs` 的 SHA256**（0.1.1 的资产已按这条规则重打并比对，见「1」）。
 - **强制推送清不掉旧对象，删库才行（2026-09-22 已解决）**：重做历史用的是强制推送，而 GitHub 不会立即回收不可达对象——实测旧提交在强推之后仍能按 SHA 取到。因此改由仓库主人在网页端删库，随后重建、重推、重挂 Release。重建后实测：仓库建成前为 404、旧提交在 API 与 `raw.githubusercontent.com` 两条路径上均为 **404**，那份带真实素材的夹具已不可达。代价是仓库创建时间、star/issue 计数与旧 Actions 记录一并重置，市场投稿的「满 1 天」重新起算。本机存有的 GitHub 凭据只有 `gist, repo, workflow` 三个 scope，**没有 `delete_repo`**（实测 `DELETE /repos/...` 返回 403），所以删库这一步只能由仓库主人做。
 - **npm 的 `private` 字段**：本机实测 `npm publish --dry-run` **不会**拦它（退出码 0），所以别指望 dry-run 提前发现；真实发布时才会以 `EPRIVATE` 拒绝。证据等级：报错文案与社区问答一致，但未在本机复现（缺账号）。
 - **`latest/download/` 的时效陷阱**：该形式只在请求时解析 `latest`，文件名照字面取；资产名带版本号会在你下次发版后静默 404。

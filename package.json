@@ -1,6 +1,6 @@
 {
   "name": "dsh-offpeak-inbox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DSH 错峰收件箱：平时把会话与想法存起来，只在 DeepSeek API 平价（错峰）时段自动推送给 DSH 执行。",
   "type": "module",
   "main": "lib/index.mjs",

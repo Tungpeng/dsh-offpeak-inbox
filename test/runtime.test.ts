@@ -50,6 +50,8 @@ interface Harness {
   runningSessions: Set<string>
   /** Advance the clock the plugin reads, in milliseconds. */
   advanceClock(ms: number): void
+  /** The host's `settings.describe()` read: serialize every registered schema. */
+  describeSettings(): unknown[]
 }
 
 /**
@@ -68,6 +70,7 @@ async function boot(options: { withSettings?: boolean; strictListWire?: boolean;
   const routes: Harness['routes'] = []
   const gatewayCalls: string[] = []
   const prompts: Array<Record<string, unknown>> = []
+  const registrations: Array<{ ns: string; schema: unknown }> = []
   const sessions = new Map<string, { status: 'idle' | 'running'; followup(message: unknown): void }>()
   const runningSessions = new Set<string>()
   // The plugin reads this clock, so a test can move time across a window
@@ -136,7 +139,10 @@ async function boot(options: { withSettings?: boolean; strictListWire?: boolean;
       inner.provide('systemPrompt', { section: () => () => {} })
       if (options.withSettings !== false) {
         inner.provide('settings', {
-          register: () => ({ get: () => undefined, watch: () => {} }),
+          register: (ns: string, schema: unknown) => {
+            registrations.push({ ns, schema })
+            return { get: () => undefined, watch: () => {} }
+          },
         })
       }
       inner.provide('now', () => clock)
@@ -149,6 +155,21 @@ async function boot(options: { withSettings?: boolean; strictListWire?: boolean;
     prompts,
     runningSessions,
     advanceClock(ms: number): void { clock += ms },
+    /**
+     * Reproduce the host read the settings page makes. `describe()` holds no
+     * per-namespace guard, so a schema it cannot serialize fails the whole call
+     * with the message below — which is exactly how a bare function registered
+     * as the schema broke the settings page.
+     */
+    describeSettings(): unknown[] {
+      return registrations.map(({ schema }) => {
+        const serializable = schema as { toJSON?: () => unknown }
+        if (typeof serializable.toJSON !== 'function') {
+          throw new TypeError('registration.schema.toJSON is not a function')
+        }
+        return serializable.toJSON()
+      })
+    },
   }
 }
 
@@ -410,6 +431,17 @@ describe('real Cordis activation', () => {
     expect(harness.prompts).toHaveLength(1)
     expect(harness.prompts[0]?.['sessionId']).toBe('session-existing')
     expect(JSON.stringify(harness.prompts[0])).toMatch(/not at full price/)
+  })
+
+  it('registers a schema the settings page can serialize', async () => {
+    const harness = await boot()
+    const plugin = await loadPlugin()
+    await harness.ctx.plugin({ ...plugin, name: 'offpeak-inbox' })
+
+    const [envelope] = harness.describeSettings() as Array<{ uid?: unknown; refs?: Record<string, unknown> }>
+    expect(envelope?.uid).toBeTypeOf('number')
+    // The envelope is only useful to a form if its nodes travel with it.
+    expect(Object.keys(envelope?.refs ?? {}).length).toBeGreaterThan(1)
   })
 
   it('runs with the optional settings service absent', async () => {

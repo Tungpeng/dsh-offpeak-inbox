@@ -59,6 +59,12 @@ interface StandardIssue {
 
 const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/
 
+/** Smallest accepted `launchIntervalSeconds`, and the schema bound a form shows. */
+const LAUNCH_INTERVAL_FLOOR = 2
+
+/** Smallest accepted `executionTimeoutSeconds`, and the schema bound a form shows. */
+const EXECUTION_TIMEOUT_FLOOR = 60
+
 function minutesOf(clock: string): number {
   return Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3, 5))
 }
@@ -147,14 +153,14 @@ function parseConfig(raw: unknown): { value?: OffpeakInboxConfig; issues?: Stand
     launchIntervalSeconds: validateInteger(
       record['launchIntervalSeconds'] ?? record['tickSeconds'],
       DEFAULT_CONFIG.launchIntervalSeconds,
-      2,
+      LAUNCH_INTERVAL_FLOOR,
       'launchIntervalSeconds',
       issues,
     ),
     executionTimeoutSeconds: validateInteger(
       record['executionTimeoutSeconds'],
       DEFAULT_CONFIG.executionTimeoutSeconds,
-      60,
+      EXECUTION_TIMEOUT_FLOOR,
       'executionTimeoutSeconds',
       issues,
     ),
@@ -173,6 +179,79 @@ function configFunction(raw?: unknown): OffpeakInboxConfig {
 }
 
 /**
+ * One node of a serialized Schemastery schema, whose descendants are ids into
+ * the same envelope's `refs` table.
+ */
+interface SerializedSchemaNode {
+  /** Node kind: `object`, `array`, `string`, `number`, or `boolean`. */
+  type: string
+  /** Node metadata; `default`, `min`, and `step` are what a form renderer reads. */
+  meta: Record<string, unknown>
+  /** `object` property schemas, keyed by property name and valued by node id. */
+  dict?: Record<string, number>
+  /** `array` element schema, by node id. */
+  inner?: number
+}
+
+/** A serialized Schemastery schema, the form `new Schema(json)` rehydrates. */
+interface SerializedConfig {
+  /** Node id of the root schema. */
+  uid: number
+  /** Every node in the envelope, keyed by node id. */
+  refs: Record<number, SerializedSchemaNode>
+}
+
+/**
+ * Serialize the configuration schema for the settings service.
+ *
+ * `SettingsProvider.describe()` serializes every registered namespace with
+ * `schema.toJSON()` before answering the settings page, and an object without
+ * that method fails the call for the whole deployment rather than for this
+ * namespace alone. Schemastery's wire form is a root id plus a `refs` table
+ * mapping each node id to its options, with descendants referenced by id, so it
+ * is built here instead of taking on a schema library as a runtime dependency.
+ * @returns the serialized schema envelope.
+ */
+function serializeConfig(): SerializedConfig {
+  const refs: Record<number, SerializedSchemaNode> = {}
+  let allocated = 0
+  const node = (options: SerializedSchemaNode): number => {
+    allocated += 1
+    refs[allocated] = options
+    return allocated
+  }
+  const start = node({ type: 'string', meta: { required: true } })
+  const end = node({ type: 'string', meta: { required: true } })
+  const range = node({ type: 'object', meta: { default: {} }, dict: { start, end } })
+  const ranges = node({
+    type: 'array',
+    meta: { default: DEFAULT_CONFIG.ranges.map(entry => ({ ...entry })) },
+    inner: range,
+  })
+  return {
+    uid: node({
+      type: 'object',
+      meta: { default: structuredClone(DEFAULT_CONFIG) },
+      dict: {
+        enabled: node({ type: 'boolean', meta: { default: DEFAULT_CONFIG.enabled } }),
+        timeZone: node({ type: 'string', meta: { default: DEFAULT_CONFIG.timeZone } }),
+        ranges,
+        announceToAgent: node({ type: 'boolean', meta: { default: DEFAULT_CONFIG.announceToAgent } }),
+        launchIntervalSeconds: node({
+          type: 'number',
+          meta: { default: DEFAULT_CONFIG.launchIntervalSeconds, min: LAUNCH_INTERVAL_FLOOR, step: 1 },
+        }),
+        executionTimeoutSeconds: node({
+          type: 'number',
+          meta: { default: DEFAULT_CONFIG.executionTimeoutSeconds, min: EXECUTION_TIMEOUT_FLOOR, step: 1 },
+        }),
+      },
+    }),
+    refs,
+  }
+}
+
+/**
  * Cordis-facing schema: callable for the settings service, and a Standard
  * Schema so the loader can validate and default the composition entry.
  */
@@ -184,6 +263,8 @@ export const Config = Object.assign(configFunction, {
   },
   /** Defaults the loader-driven settings editors display. */
   default: DEFAULT_CONFIG,
+  /** Serialized schema the settings service hands to configuration UIs. */
+  toJSON: serializeConfig,
 })
 
 /** Exported for the package's own tests. */

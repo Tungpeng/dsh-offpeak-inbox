@@ -2,6 +2,14 @@
 
 本文件记录本插件的版本变更。
 
+## 0.1.1
+
+修掉 0.1.0 里会让**整个设置页打不开**的故障；除该修复外没有行为变化。
+
+- **修复：设置页不再报 `registration.schema.toJSON is not a function`。** 宿主回答设置页时会遍历每个已注册的命名空间并调用 `schema.toJSON()`（`@deepseek-ai/dsh-settings` 的 `SettingsProvider.describe()`），而本插件注册的 `Config` 是一个带 Standard Schema 的普通函数、没有 `toJSON`，于是这次调用直接抛出。`describe()` 里没有按命名空间兜底的保护，**挂掉的是整条 `settings/describe`，不只是本插件的配置项**——同一部署下其它插件的设置卡片也一起拿不到。现在 `Config.toJSON()` 会产出设置页要的序列化 schema（Schemastery 的 `uid` + `refs` 线格式：每个节点按 id 登记，子节点用 id 引用），仍然不引入任何运行时依赖。
+- **回归防线**：`test/service.test.ts` 断言序列化出来的 schema 覆盖全部六个配置键、每个字段的类型/默认值/下限，并逐条解析 `refs` 引用（引用缺失即失败）；`test/runtime.test.ts` 的假宿主改成与真宿主一样在读取时调用 `schema.toJSON()`——把修复去掉，这条测试会原样报出用户看到的那句错。
+- **顺带**：`launchIntervalSeconds`（2）与 `executionTimeoutSeconds`（60）的下限提为具名常量，校验器与 schema 展示的下限从此不可能各说各话。
+
 ## 0.1.0
 
 首个公开版本：收件箱面板与错峰调度之外，还包含「已有会话也能错峰」的定向投递、折叠历史与面板搜索。

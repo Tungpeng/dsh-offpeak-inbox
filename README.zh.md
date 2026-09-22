@@ -126,7 +126,7 @@ lib/client.js     构建产物：浏览器半区，必须是 __ModuleLoader__.lo
 
 设计上的几个要点：
 
-- **Host 半区运行时依赖为零。** 所有 harness 服务都通过 Cordis 注入，会话 RPC 走注入的 gateway；配置校验直接用 Standard Schema 手写实现，因此不需要 schemastery 之类的 schema 库。
+- **Host 半区运行时依赖为零。** 所有 harness 服务都通过 Cordis 注入，会话 RPC 走注入的 gateway；配置校验直接用 Standard Schema 手写实现，设置页要读的序列化 schema 同样手写，因此不需要 schemastery 之类的 schema 库。
 - **投递统一走 `session/prompt`，不直接往运行中的 agent 里塞消息。** harness 收件箱里的一条消息是完整的 `UserMessage`（身份、角色、`content`、`source`）；自行拼装而缺 `source` 会让下一轮直接以 `Cannot read properties of undefined (reading 'kind')` 失败。交给 gateway 组装可让插件不碰内部消息字段，运行中的 agent 句柄只用于读取执行状态。发往已有会话的条目走的是同一个方法，只是目的会话在捕获时就写在 `targetSessionId` 上。
 - **定向条目不占用 `sessionId` 字段。** `sessionId` 的语义是"插件建出来的那个会话，用来盯它跑完没有"；用户指定的目的会话写在 `targetSessionId` 上，投递被接受即结算，避免把用户之后的轮次误当成这次执行。
 - **当前会话来自浏览器自己的持久化值。** 按钮读 `localStorage` 的 `dsh.sessions.current`（宿主 `sessions` 服务把选中项持久化在这），不解析 URL、不猜标题；读不到就明确报错。
@@ -159,6 +159,7 @@ npm test             # 自动构建后跑：单元测试 + 针对构建产物的
 - **按钮是否落位要上报给宿主。** 面板有没有按钮都能打开，所以宿主无法区分"浏览器半区没跑"和"跑了但没找到输入框"。`client.ts` 会把落位结果（`placed` / `no-composer` / `no-send-control`）POST 给 `action: buttonState`，`state.view.buttonMounted` / `buttonReason` 一眼可查。
 - **`dsh.sessions.current` 是同源唯一的键，多标签页会互相覆盖。** 全 `packages/client` 里没有任何 `storage` 事件监听，所以另一个标签页切换会话后，这个标签页的按钮会读到**别的会话 id**。按钮因此做了两件事：发之前核对这个 id 是否在宿主返回的会话列表里（不在就不发，并说明这个会话不在可选列表里——重新点一次不会变好，因为列表里确实没有它），以及把目的会话标题写进提示文案，让人能一眼看出到底发去了哪。
 - **DOM 变更观察会自己触发自己。** 该按钮的观察器与侧边栏入口共用 `queueMicrotask` 合并策略：一轮微任务里只尝试一次，且已经就位时不写 DOM。
+- **注册给设置系统的 schema 必须能序列化，否则整个设置页都打不开。** 宿主回答设置页时会对**每一个**已注册的命名空间调用 `schema.toJSON()`（`SettingsProvider.describe()`），中间没有按命名空间兜底，因此少一个方法就整条 RPC 抛错——挂掉的是所有插件的设置卡片，不只是出错的那个。0.1.0 注册的就是一个普通函数，结果正是如此；现在 `test/runtime.test.ts` 的假宿主也按同样方式读取 schema，这个故障不会再悄悄回来。
 
 ## 许可
 
